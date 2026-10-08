@@ -1,0 +1,11 @@
+/* SPIKE — pulls in the whole app stylesheet (theme tokens + Tailwind) and
+   points Tailwind at the Kara sources. Far more CSS than Kara needs. */
+@import '../../src/app/globals.css';
+
+@source '../../src/components/public/code-editor/kara-*.tsx';
+@source '../../src/components/public/code-editor/celebrations.ts';
+@source './*.tsx';
+
+body {
+  background: var(--color-background);
+}
