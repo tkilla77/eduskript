@@ -1,9 +1,10 @@
 /**
  * Per-student Kara progress, shared across every page of a skript: best stars
  * per level and the evidence collected (shown on the evidence board). Stored
- * like the skript-wide python imports (`userDataService` with the skriptId as
- * page key), so it syncs like other user data. Without a skriptId (e.g. the
- * dashboard preview) nothing is stored.
+ * through the Kara host (host.ts) with the skriptId as scope; in Eduskript that
+ * is userDataService, like the skript-wide python imports, so it syncs like
+ * other user data. Without a skriptId (e.g. the dashboard preview) nothing is
+ * stored.
  *
  * Archive (`archive: true` levels): the student's main.py at the latest win,
  * per level id, read back by `<kara-archive of="…">` (kara-archive.tsx). It
@@ -16,7 +17,7 @@
  * This only serialises writes within one tab.
  */
 
-import { userDataService } from '@/lib/userdata'
+import { karaHost } from './host'
 import type { KaraEvidence } from './world'
 
 export const KARA_PROGRESS_KEY = 'kara-progress'
@@ -52,8 +53,8 @@ function serialized(skriptId: string, task: () => Promise<void>): Promise<void> 
 }
 
 export async function loadKaraProgress(skriptId: string): Promise<KaraProgress> {
-  const record = await userDataService.get<KaraProgress>(skriptId, KARA_PROGRESS_KEY)
-  return { ...EMPTY, ...(record?.data ?? {}) }
+  const data = await karaHost().getState<KaraProgress>(skriptId, KARA_PROGRESS_KEY)
+  return { ...EMPTY, ...(data ?? {}) }
 }
 
 /**
@@ -78,7 +79,7 @@ async function mergeResult(skriptId: string, level: string, stars: number, evide
   if (current.archive || archive) next.archive = { ...current.archive }
   if (archive) next.archive![level] = { code: archiveCode!, at: Date.now() }
   const changed = archive || next.levels[level] !== current.levels[level] || evidence.some(e => !current.evidence[e.id])
-  if (changed) await userDataService.save(skriptId, KARA_PROGRESS_KEY, next, { immediate: true })
+  if (changed) await karaHost().saveState(skriptId, KARA_PROGRESS_KEY, next)
 }
 
 /** The archived code of `level`, or null when nothing was saved. */
@@ -87,5 +88,5 @@ export async function loadKaraArchive(skriptId: string, level: string): Promise<
 }
 
 export function subscribeKaraProgress(skriptId: string, callback: (p: KaraProgress) => void): () => void {
-  return userDataService.subscribe<KaraProgress>(skriptId, KARA_PROGRESS_KEY, data => callback({ ...EMPTY, ...data }))
+  return karaHost().onStateChanged<KaraProgress>(skriptId, KARA_PROGRESS_KEY, data => callback({ ...EMPTY, ...data }))
 }

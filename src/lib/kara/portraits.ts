@@ -4,6 +4,8 @@
  * renders). Unknown speakers without a file get none (the bar shows an initial).
  */
 
+import { karaHost } from './host'
+
 const BUILT_IN = new Set(['aurora', 'brandt', 'bueroklaemmerli', 'jonas', 'lenz', 'pavel', 'tanaka', 'weber'])
 
 /** 'BÜROKLÄMMERLI' → 'bueroklaemmerli' (built-in file names are ASCII). */
@@ -14,5 +16,5 @@ function asciiKey(key: string): string {
 export function karaPortrait(speaker: string, assets?: Record<string, string>): string | undefined {
   const key = speaker.toLowerCase()
   const builtIn = asciiKey(key)
-  return assets?.[`portrait:${key}`] ?? (BUILT_IN.has(builtIn) ? `/kara/portraits/${builtIn}.png` : undefined)
+  return assets?.[`portrait:${key}`] ?? (BUILT_IN.has(builtIn) ? karaHost().assetUrl(`/kara/portraits/${builtIn}.png`) : undefined)
 }

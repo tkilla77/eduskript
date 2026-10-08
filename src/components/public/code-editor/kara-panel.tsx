@@ -82,6 +82,7 @@ import { recordKaraResult } from '@/lib/kara/progress'
 import { playVoice, stopVoice, ttsLineUrl } from '@/lib/kara/voice'
 import { AURORA_WANT, auroraLine, type KaraLintCode } from '@/lib/kara/aurora-defaults'
 import { playSfx } from '@/lib/kara/sfx'
+import { karaHost } from '@/lib/kara/host'
 import { registerSoundSource, useMuted } from '@/lib/sound'
 import { AFTERMATH_TEXT, DOOR, ITEM, LASER, karaClues } from '@/lib/kara/world'
 import { AdMark, KaraPortrait, useSpeaking } from './kara-portrait'
@@ -159,7 +160,7 @@ function loadImage(src: string): Promise<HTMLImageElement | null> {
 let defaultSpritesPromise: Promise<HTMLImageElement[]> | null = null
 function loadDefaultSprites(): Promise<HTMLImageElement[]> {
   defaultSpritesPromise ??= Promise.all(MOP7_SPRITES.map(async (src, i) =>
-    (await loadImage(src)) ?? (await loadImage(DEFAULT_SPRITES[i]))!))
+    (await loadImage(karaHost().assetUrl(src))) ?? (await loadImage(DEFAULT_SPRITES[i]))!))
   return defaultSpritesPromise
 }
 

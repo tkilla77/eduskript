@@ -2,9 +2,9 @@
 
 /**
  * Plays Kara voice lines in the browser. Lines come either from a skript file
- * (`audio=` in the level config) or from the cached TTS route
- * (/api/kara/tts returns the cached raw line, rendering it on first request,
- * see src/lib/kara/voice-tts.server.ts).
+ * (`audio=` in the level config) or from the host's voiceLineUrl (host.ts; in
+ * Eduskript the cached TTS route /api/kara/tts, which returns the cached raw
+ * line, rendering it on first request, see src/lib/kara/voice-tts.server.ts).
  * The speaker's voice effect is applied live via Web Audio (voice-fx.ts).
  * One line plays at a time.
  */
@@ -13,6 +13,7 @@ let ctx: AudioContext | null = null
 import { connectVoiceFx, VOICE_FX } from './voice-fx'
 import { adSpan } from './voice-directions'
 import { isMuted, onMuteChange } from '@/lib/sound'
+import { karaHost } from './host'
 
 // Lines play through an <audio> element (pitch-preserving `playbackRate`)
 // routed into Web Audio for the effect chain. Needs CORS on the file host
@@ -59,16 +60,12 @@ export function audio(): AudioContext {
   return ctx
 }
 
-/** URL of a pre-rendered line; null when there is none. */
+/** URL of a pre-rendered line; null when there is none (or the host has no voices). */
 export function ttsLineUrl(speaker: string, text: string): Promise<string | null> {
   const key = `${speaker}|${text}`
   let p = urlCache.get(key)
   if (!p) {
-    p = fetch('/api/kara/tts', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ speaker, text }),
-    }).then(r => (r.ok ? r.json() : null)).then(j => j?.url ?? null).catch(() => null)
+    p = karaHost().voiceLineUrl?.(speaker, text) ?? Promise.resolve(null)
     urlCache.set(key, p)
   }
   return p
@@ -123,7 +120,7 @@ function scheduleAd(el: HTMLAudioElement, text: string, gain: GainNode) {
   const span = adSpan(text)
   if (!span || !Number.isFinite(el.duration)) return
   const real = (t: number) => (t * el.duration * 1000) / (el.playbackRate || 1) // media → wall-clock ms
-  const music = new Audio(AD_JINGLE)
+  const music = new Audio(karaHost().assetUrl(AD_JINGLE))
   music.loop = true
   music.volume = 0
   const fadeIn = () => {

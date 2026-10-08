@@ -2,10 +2,11 @@
  * Tileset rendering for the Kara world.
  *
  * The art is a licensed pack (gameart2d "Sci-fi Top Down Tileset") that may
- * not be redistributed, so it is NOT in this repo. It is served from
- * NEXT_PUBLIC_KARA_TILESET_URL (bucket in prod, /kara-tiles from a gitignored
- * public/ folder in dev). Without that variable — e.g. in a fork — every tile
- * falls back to a labelled placeholder; the world stays fully usable.
+ * not be redistributed, so it is NOT in this repo. It is served from the
+ * host's tilesetUrl (host.ts; in Eduskript NEXT_PUBLIC_KARA_TILESET_URL: bucket
+ * in prod, /kara-tiles from a gitignored public/ folder in dev). Without it —
+ * e.g. in a fork — every tile falls back to a labelled placeholder; the world
+ * stays fully usable.
  *
  * Walls are autotiled: each `#` cell picks one of the pack's wall pieces from
  * its 8 neighbours (metal border where the neighbour is not a wall, a small
@@ -15,8 +16,7 @@
  */
 
 import { ACID, BLOCK, BOX, CHIP, DOOR, ITEM, LASER, type KaraWorld } from './world'
-
-export const KARA_TILESET_URL = (process.env.NEXT_PUBLIC_KARA_TILESET_URL || '').replace(/\/$/, '')
+import { karaHost } from './host'
 
 // Mask bits: border on a side (neighbour is not a wall) + inner-corner nubs.
 const N = 1, E = 2, S = 4, W = 8, NE = 16, SE = 32, SW = 64, NW = 128
@@ -82,10 +82,12 @@ export function loadKaraTileset(): Promise<KaraTileset> {
       img.onerror = () => resolve()
       img.src = src
     })
+    const { assetUrl, tilesetUrl } = karaHost()
+    const tiles = tilesetUrl()
     await Promise.all([
-      ...EVIDENCE_LOOKS.map(l => load(`evidence-${l}`, `/kara/evidence/${l}.png`)),
-      ...OWN_OBSTACLES.map(n => load(n, `/kara/obstacles/${n}.png`)),
-      ...(KARA_TILESET_URL ? TILE_NAMES.map(name => load(name, `${KARA_TILESET_URL}/${name}.png`)) : []),
+      ...EVIDENCE_LOOKS.map(l => load(`evidence-${l}`, assetUrl(`/kara/evidence/${l}.png`))),
+      ...OWN_OBSTACLES.map(n => load(n, assetUrl(`/kara/obstacles/${n}.png`))),
+      ...(tiles ? TILE_NAMES.map(name => load(name, `${tiles}/${name}.png`)) : []),
     ])
     return set
   })()
