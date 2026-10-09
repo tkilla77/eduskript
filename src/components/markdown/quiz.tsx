@@ -439,6 +439,10 @@ function QuestionInner({
   // Skipped while reviewing/locked or empty.
   const lastSavedSigRef = useRef<string | null>(null)
   const mountedRef = useRef(false)
+  // The pending debounced autosave. Its closure holds the render it was
+  // scheduled in, so handleCheck cancels it: firing after a Check it would
+  // save the pre-check attempts/checked over the check's save.
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const commitAutosave = () => {
     if (reviewMode || locked || isEmptyAnswer) return
@@ -464,6 +468,7 @@ function QuestionInner({
     }
     const delay = type === 'text' ? AUTOSAVE_TEXT_MS : AUTOSAVE_DISCRETE_MS
     const t = setTimeout(commitAutosave, delay)
+    autosaveTimerRef.current = t
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, textAnswer, numberAnswer, rangeAnswer, reviewMode, stageLocked])
@@ -537,6 +542,9 @@ function QuestionInner({
   // the click can't lose the lock.
   const handleCheck = () => {
     if (!checkMode || locked || isEmptyAnswer) return
+    // The check saves the current answer itself; a still-pending autosave
+    // would overwrite it with stale attempts/checked (see autosaveTimerRef).
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current)
     const used = attemptsUsed + 1
     const final = currentCorrect !== false || used >= attemptsMax
     setAttemptsUsed(used)

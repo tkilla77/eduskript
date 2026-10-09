@@ -83,6 +83,24 @@ describe('check mode (non-exam default)', () => {
     expect(lastSaved()).toMatchObject({ attempts: 1, checked: true, choiceScore: 1 })
   })
 
+  it('a Check right after a change is not overwritten by the pending autosave', () => {
+    vi.useFakeTimers()
+    try {
+      renderChoice({ attempts: 3 })
+      pick('21')
+      // Within the 400 ms autosave debounce of the pick.
+      act(() => { fireEvent.click(checkButton()!) })
+      act(() => { vi.advanceTimersByTime(1000) })
+      expect(lastSaved()).toMatchObject({ attempts: 1, checked: false, selected: [0] })
+      pick('23')
+      act(() => { fireEvent.click(checkButton()!) })
+      act(() => { vi.advanceTimersByTime(1000) })
+      expect(lastSaved()).toMatchObject({ attempts: 2, checked: true, selected: [1] })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('restores a finished question as locked', () => {
     renderChoice({}, { isSubmitted: true, selected: [0], attempts: 1, checked: true })
     expect(checkButton()).not.toBeInTheDocument()
