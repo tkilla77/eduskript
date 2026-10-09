@@ -76,6 +76,8 @@ export function KaraWidget() {
   const [suite, setSuite] = useState<Suite | null>(null)
   const [busy, setBusy] = useState(false)
   const [errors, setErrors] = useState('')
+  // Latest Run for the keymap, which is built once with the editor.
+  const runRef = useRef<() => void>(() => {})
   // KaraPanel's fill mode needs a fixed-height parent: only side by side.
   const isWide = useMediaQuery('(min-width: 768px)')
 
@@ -90,6 +92,12 @@ export function KaraWidget() {
         state: EditorState.create({
           doc: saved ?? config.attributes.code ?? '',
           extensions: [
+            // Ctrl/Cmd+Enter and Shift+Enter run, as in Eduskript. Prec.highest:
+            // basicSetup's keymap binds Mod-Enter (insertBlankLine) otherwise.
+            Prec.highest(keymap.of([
+              { key: 'Mod-Enter', run: () => { runRef.current(); return true } },
+              { key: 'Shift-Enter', run: () => { runRef.current(); return true } },
+            ])),
             basicSetup, python(), keymap.of([indentWithTab]), ...karaLineHighlighting(),
             themeCompartment.current.of(editorTheme(host().init.theme)),
             EditorView.updateListener.of(u => {
@@ -171,10 +179,12 @@ export function KaraWidget() {
     }
   }
 
+  runRef.current = () => { if (!busy) void start(false) }
+
   return (
     <div className="flex flex-col gap-2 p-2 text-foreground">
       <div className="flex gap-2">
-        <button className="rounded border px-3 py-1" disabled={busy} onClick={() => void start(false)}>Run</button>
+        <button className="rounded border px-3 py-1" disabled={busy} onClick={() => void start(false)} title="Run (Ctrl/Cmd+Enter)">Run</button>
         <button className="rounded border px-3 py-1" disabled={!busy} onClick={() => abort.current?.abort()}>Stop</button>
       </div>
       <div
