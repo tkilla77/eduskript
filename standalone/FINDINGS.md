@@ -316,7 +316,10 @@ versions should be pinned by URL so students get what the teacher tested.
 - **Feedback policy** (`init.policy.feedback`) next to `mode`, for exams.
 - **Two grading styles:** client-scored (key in config) and host-scored (no
   key; `feedback` message back). See the quiz section.
-- **attempt vs submit** need distinct meanings for autosaving widgets.
+- **attempt vs submit** need distinct meanings for autosaving widgets. v0.1
+  now has `attempt` (Kara: a single Run, which never earns stars) next to
+  `submit` (Kara: "Test all worlds"); embed.js raises `widget-attempt`. The
+  quiz still submits every saved answer (see the quiz section).
 - **Generic host.** `KaraHost` (PR 1) is Kara-specific. The quiz shows the
   shape of the generic one: state with scopes, mode/policy, submit/attempt,
   assets; Kara's voice lines become an optional capability on top.

@@ -22,9 +22,10 @@
  * Hide the raw body until this script runs:
  *   learning-widget:not(:defined) { display: none }
  *
- * Events: `widget-submit` (bubbles) on the element, detail = { instanceId,
+ * Events (bubble) on the element: `widget-submit`, detail = { instanceId,
  * response, score } — score is self-reported by the widget, never trust it
- * for grading without checking the response.
+ * for grading without checking the response; `widget-attempt`, detail =
+ * { instanceId, event } — a try that is not a submission (Kara: a single Run).
  *
  * Trust model. This script runs with the host page's rights, so the host must
  * trust it (vendor it, or pin it with an integrity hash). It does NOT trust the
@@ -36,7 +37,7 @@
  *     the message types below, with their fields type-checked;
  *   - nothing a widget sends is evaluated or inserted as HTML; the only effects
  *     are: localStorage writes under this widget's own prefix (size-capped),
- *     the iframe's height (clamped), and the widget-submit event;
+ *     the iframe's height (clamped), and the widget-submit/-attempt events;
  *   - storage is namespaced by widget URL, so one widget cannot read another
  *     widget's state. Embeds of the SAME widget URL on this site can address
  *     each other's group state by naming the group, by design.
@@ -122,6 +123,13 @@ window.addEventListener('message', (e) => {
       }))
       break
     }
+
+    case 'attempt':
+      embed.el.dispatchEvent(new CustomEvent('widget-attempt', {
+        bubbles: true,
+        detail: { instanceId: embed.instanceId, event: m.event },
+      }))
+      break
 
     case 'resize':
       if (!isNum(m.height)) return

@@ -13,6 +13,8 @@
     h1 { margin-bottom: 0; }
     .lead { color: var(--muted); margin-top: 4px; }
     code { font-size: 0.9em; }
+    pre { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; overflow-x: auto; }
+    pre code { font-size: 14px; }
     learning-widget { display: block; margin: 16px 0 32px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
     learning-widget:not(:defined) { display: none; }
     #log { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; font: 13px/1.5 ui-monospace, monospace; white-space: pre-wrap; min-height: 3em; }
@@ -26,8 +28,13 @@
 
   <h2>Kara: two levels, one group</h2>
   <p>Both levels share the group <code>week-1</code>, so stars and evidence are stored once for the group.
-    Try: <code>while not wall_front():</code> / <code>    if on_barrel(): remove_barrel()</code> /
-    <code>    move()</code>, then <code>turn_left()</code> and <code>move()</code>.</p>
+    A solution for the first level:</p>
+  <pre><code>while not wall_front():
+    if on_barrel():
+        remove_barrel()
+    move()
+turn_left()
+move()</code></pre>
 
   <learning-widget src="../kara/" id="kara-corridor" group="week-1" height="520">
     <script type="text/plain">
@@ -77,17 +84,25 @@ print(a)</code></pre></question-prompt>
   </learning-widget>
 
   <h2>What the host received</h2>
-  <p>Every <code>widget-submit</code> event from the widgets above (scores are self-reported):</p>
+  <p>Every event from the widgets above: <code>attempt</code> for a try (Kara: <em>Run</em>),
+    <code>submit</code> for a submission (Kara: <em>Test all worlds</em>; quiz: a saved answer).
+    Scores are self-reported.</p>
   <div id="log">Nothing submitted yet.</div>
 
   <script type="module">
     const log = document.getElementById('log')
     let first = true
+    const add = (line) => {
+      log.textContent = (first ? '' : log.textContent + '\n') + `${new Date().toLocaleTimeString()}  ${line}`
+      first = false
+    }
     document.addEventListener('widget-submit', (e) => {
       const { instanceId, response, score } = e.detail
-      const line = `${new Date().toLocaleTimeString()}  ${instanceId}  score=${score ? `${score.raw}/${score.max}` : '–'}  response=${JSON.stringify(response)}`
-      log.textContent = (first ? '' : log.textContent + '\n') + line
-      first = false
+      add(`submit   ${instanceId}  score=${score ? `${score.raw}/${score.max}` : '–'}  response=${JSON.stringify(response)}`)
+    })
+    document.addEventListener('widget-attempt', (e) => {
+      const { instanceId, event } = e.detail
+      add(`attempt  ${instanceId}  ${JSON.stringify(event)}`)
     })
   </script>
 </body>

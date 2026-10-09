@@ -8,6 +8,7 @@
  *   ready                            sent on load; the host answers with init
  *   getState  {id, scope, key}       the host answers with state {id, data}
  *   saveState {scope, key, data}     the host stores it and echoes stateChanged
+ *   attempt   {event}                a try that is not a submission (Kara: a single Run)
  *   submit    {response, score?}     raw response always; score self-reported
  *   resize    {height}               content height in CSS px
  *
@@ -17,7 +18,7 @@
  *   stateChanged {scope, key, data}  after any save of a record this widget can read
  *   themeChanged {theme}
  *
- * Not in v0.1 yet: attempt, feedback (host-produced), fullscreen, capability
+ * Not in v0.1 yet: feedback (host-produced), fullscreen, capability
  * negotiation beyond the init list.
  */
 
@@ -31,6 +32,7 @@ export type WidgetMessage = Base & (
   | { type: 'ready' }
   | { type: 'getState'; id: number; scope: StateScope; key: string }
   | { type: 'saveState'; scope: StateScope; key: string; data: unknown }
+  | { type: 'attempt'; event: unknown }
   | ({ type: 'submit' } & WidgetSubmission)
   | { type: 'resize'; height: number }
 )

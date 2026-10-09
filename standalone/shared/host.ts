@@ -44,6 +44,8 @@ export interface WidgetHost {
   saveState<T>(scope: StateScope, key: string, data: T): Promise<void>
   /** Fires on every save of the record, including this widget's own (and other embeds' for `group`). */
   onStateChanged<T>(scope: StateScope, key: string, cb: (data: T) => void): () => void
+  /** A try that is not a submission (e.g. a test run); informational for the host. */
+  attempt(event: unknown): void
   submit(s: WidgetSubmission): void
   onThemeChanged(cb: (theme: Theme) => void): () => void
 }
@@ -95,6 +97,9 @@ export function createNoHost(init: Omit<WidgetInit, 'protocol' | 'capabilities'>
     },
     onStateChanged<T>(scope: StateScope, key: string, cb: (data: T) => void) {
       return listen(listeners, k(scope, key), cb as (d: unknown) => void)
+    },
+    attempt(event) {
+      console.info('[widget] attempt (no host):', event)
     },
     submit(s) {
       // No host to receive it. Logged so the spike shows what would be sent.
@@ -180,6 +185,9 @@ export function connectPostMessageHost(timeoutMs = 3000): Promise<WidgetHost | n
         // The host echoes saves back as stateChanged, to this frame and to the
         // other frames sharing the record.
         return listen(listeners, k(scope, key), cb as (d: unknown) => void)
+      },
+      attempt(event) {
+        post({ protocol: PROTOCOL, type: 'attempt', event })
       },
       submit(s) {
         post({ protocol: PROTOCOL, type: 'submit', ...s })
