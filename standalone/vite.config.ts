@@ -23,11 +23,15 @@ const src = path.resolve(here, '../src')
 const outDir = path.resolve(here, 'dist')
 
 // embed.js and the demo page are plain files, not part of the widget bundles:
-// copied unchanged so the host script stays readable and vendorable.
+// copied unchanged so the host script stays readable and vendorable. Kara's
+// built-in art (public/kara: sprites, portraits, sfx) lands next to the Kara
+// page, where kara/main.tsx resolves `/kara/...` asset paths.
 const copyPlain: Plugin = {
   name: 'copy-plain-files',
   closeBundle() {
+    cpSync(path.resolve(here, '../public/kara'), path.resolve(outDir, 'kara'), { recursive: true })
     cpSync(path.resolve(here, 'embed/embed.js'), path.resolve(outDir, 'embed.js'))
+    cpSync(path.resolve(here, 'widgets.htaccess'), path.resolve(outDir, '.htaccess'))
     cpSync(path.resolve(here, 'demo'), path.resolve(outDir, 'demo'), { recursive: true })
   },
 }
@@ -36,9 +40,8 @@ export default defineConfig({
   root: here,
   base: './',
   plugins: [react(), copyPlain],
-  // Only public/kara is needed, but publicDir takes one directory, so all of
-  // public/ (3.6 MB) is copied. A real build target should copy public/kara only.
-  publicDir: path.resolve(here, '../public'),
+  // public/ is the app's; the widgets only need public/kara (copied below).
+  publicDir: false,
   resolve: {
     alias: [
       { find: /^@\/lib\/kara\/host-inpage$/, replacement: path.resolve(here, 'shims/host-inpage.ts') },

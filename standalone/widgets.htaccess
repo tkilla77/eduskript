@@ -1,0 +1,5 @@
+# Copied to dist/.htaccess (vite.config.ts) for Apache hosts that allow overrides.
+# Widgets run in <iframe sandbox="allow-scripts">: origin "null", so their
+# module scripts and CSS are CORS requests and need this header.
+Header set Access-Control-Allow-Origin "*"
+Options -Indexes
