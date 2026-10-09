@@ -18,7 +18,7 @@ import { karaLineHighlighting, showKaraLine, type KaraLineTarget } from '@/compo
 import { KARA_MODULE_SOURCE, KARA_RUNNER } from '@/lib/kara/kara-module'
 import { karaRunInput, karaStars, parseKaraLevel, type KaraTrace } from '@/lib/kara/world'
 import { runPython, warmPyodideWorker } from '@/lib/pyodide-worker.client'
-import { host } from './host'
+import { host } from '../shared/host'
 
 const TIMEOUT_MS = 30_000
 const CODE_KEY = 'code'

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Quiz (stand-alone spike)</title>
+</head>
+<body>
+  <!-- Stand-ins for what a host would pass in init: the <question> attributes
+       and its inner HTML, already rendered from markdown by the host. -->
+  <script type="application/json" id="widget-attrs">
+    { "type": "multiple", "feedback": "check", "attempts": "2", "points": "2" }
+  </script>
+  <template id="widget-body">
+    <question-prompt><p>Which of these are <strong>immutable</strong> in Python?</p></question-prompt>
+    <answer correct="true" feedback="Yes: tuples cannot be changed after creation.">tuple</answer>
+    <answer correct="false" feedback="Lists can be changed in place.">list</answer>
+    <answer correct="true" feedback="Yes: string methods return new strings.">str</answer>
+    <answer correct="false" feedback="Dicts are mutable.">dict</answer>
+  </template>
+  <div id="root"></div>
+  <script type="module" src="./main.tsx"></script>
+</body>
+</html>

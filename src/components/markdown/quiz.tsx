@@ -1437,4 +1437,4 @@ function StaticQuestion({
   )
 }
 
-export { Question, Option, StaticQuestion }
+export { Question, Option, StaticQuestion, QuestionInner }

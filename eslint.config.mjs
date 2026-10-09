@@ -22,7 +22,7 @@ const eslintConfig = [
       'code-review/**',
       'oldstuff/**',
       'coverage/**',
-      'standalone/*/dist/**',
+      'standalone/**/dist/**',
       // Playwright e2e artifacts (minified report bundles, traces, auth state).
       'playwright-report/**',
       'test-results/**',

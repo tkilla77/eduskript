@@ -1,9 +1,11 @@
-# Spike: stand-alone Kara — findings
+# Spike: stand-alone Eduskript widgets — findings
 
-Branch `spike/kara-standalone`. Goal: run Kara outside the Eduskript app as
-static files behind a host interface, and record every dependency on the app.
+Branches: `spike/kara-standalone` (Kara only), `spike/widget-host` (Kara +
+quiz on a shared host). Goal: run Eduskript widgets outside the app as static
+files behind a host interface, and record every dependency on the app. The quiz
+part is [below](#quiz-question); everything up to it is about Kara.
 
-**Result:** it works. A 25-module slice of `src/` builds with Vite into a
+**Kara result:** it works. A 25-module slice of `src/` builds with Vite into a
 static page. It runs, replays and scores a level both directly and inside
 `<iframe sandbox="allow-scripts">`, and Stop kills a run in ~30 ms there.
 
@@ -16,20 +18,24 @@ stub so that `userDataService` is not bundled.
 ## Run it
 
 ```bash
-pnpm exec vite build   --config standalone/kara/vite.config.ts
-pnpm exec vite preview --config standalone/kara/vite.config.ts --port 4317
-# http://localhost:4317/index.html   (?id=<instance> to separate saved state)
+pnpm exec vite build   --config standalone/vite.config.ts
+pnpm exec vite preview --config standalone/vite.config.ts --port 4317
+# http://localhost:4317/kara/index.html
+# http://localhost:4317/quiz/index.html
+# ?id=<instance> separates saved state; ?mode=review for the read-only view
 ```
 
 | File | Role |
 |---|---|
-| `host.ts` | `WidgetHost` interface v0.1 draft + no-host adapter (localStorage, memory fallback) |
+| `shared/host.ts` | `WidgetHost` interface v0.1 draft + no-host adapter (localStorage, memory fallback) |
+| `shared/boot.ts` | Builds `init` from the page (attributes JSON, body, `?id`, `?mode`) — stand-in for a real host |
 | `shims/host-inpage.ts` | Replaces Eduskript's in-page `KaraHost` adapter with a stub (keeps the app out of the bundle) |
-| `widget.tsx` | CodeMirror + Run/Stop + `KaraPanel`, ~150 lines, re-assembled from `code-editor/index.tsx` |
-| `main.tsx`, `index.html` | Reads the level from the page (stand-in for `init.config.body`), installs the hosts (`setKaraHost`), mounts. `?tiles=<url>` sets a tileset URL |
-| `vite.config.ts` | `@` alias to `src/`, host-inpage stub, CORS header on preview |
+| `kara/widget.tsx` | CodeMirror + Run/Stop + `KaraPanel`, ~150 lines, re-assembled from `code-editor/index.tsx` |
+| `kara/main.tsx` | Installs the hosts (`setKaraHost` on top of the widget host). `?tiles=<url>` sets a tileset URL |
+| `quiz/widget.tsx` | Eduskript's `QuestionInner` on the widget host: state, mode, submit |
+| `vite.config.ts` | One build, one page per widget; `@` alias to `src/`, host-inpage stub, CORS header on preview |
 
-Left out of the spike: file tabs, toolbox / skript-wide imports, version
+Left out of the Kara spike: file tabs, toolbox / skript-wide imports, version
 history, highlights, exam/grading, intro card, teacher voice editor, aftermath
 replay, `@file.json` data files, resizable layout.
 
@@ -152,6 +158,85 @@ Options, cheapest first:
 Recommendation: 1 now; 4 for first-party widgets; 2 as the long-term route for
 untrusted widgets.
 
+## Quiz question
+
+`quiz/` runs Eduskript's `QuestionInner` (`src/components/markdown/quiz.tsx`,
+now exported) unchanged on the widget host. Tested in Chromium, directly and in
+the sandboxed iframe: multiple choice in `check` mode with 2 attempts. Partial
+marks after a wrong check, the answer key after the final check, score 2/2,
+state saved and restored, `?mode=review` gives the read-only graded view.
+
+### How it is wired
+
+- **Content: host-rendered HTML.** In Eduskript the question gets its
+  content as rendered React children: `<question-prompt>`,
+  `<answer correct="…" feedback="…">`, `<answer-feedback>` (markdown and
+  KaTeX already applied). The widget takes the same thing as an HTML fragment
+  in `init.config.body` and turns it into React elements (~15 lines,
+  `htmlToReact`). So the widget ships **no markdown pipeline**; rendering
+  markdown/math is the host's job (DokuWiki: the plugin renders the inner
+  wiki text). This generalises: `body` is HTML whenever the widget shows
+  author text.
+- **Attributes** (`type`, `feedback`, `attempts`, `points`, `expected`, …) go
+  in `init.config.attributes` as strings; the widget coerces them, like
+  `markdown-components.tsx` does.
+- **State:** one record per instance (`saveState(instanceId, 'answer')`). No
+  course scope needed, unlike Kara.
+- `QuestionInner` already takes `initialData` / `updateData` as props, so no
+  change to the component was needed beyond exporting it.
+
+### Coupling
+
+Importing `quiz.tsx` pulls in ~30 app modules, because the file also holds the
+`Question` router, `SyncedQuestion`, `SurveyQuestion` and the progress bar:
+the userdata sync engine (Dexie), next-auth (`survey-provider`), realtime
+events, teacher class / exam / review / stage contexts, Radix dialog, scoring
+helpers. They load and stay idle (no errors, the contexts default to "off"),
+but the quiz bundle is 216 kB for a question. `QuestionInner` itself only reads
+three contexts: exam page, stage lock, grading review.
+
+**PR candidate:** move `QuestionInner` and its pure helpers (option
+extraction, scoring) into `question-core.tsx`, with exam page / stage lock /
+review passed in as props or read from a small host context.
+`quiz.tsx` keeps the Eduskript wrappers.
+
+### Modes, feedback and grading
+
+- Eduskript has two layers: the **author's** feedback mode (`check`, `instant`,
+  `none`) and the **page's** situation (review/grade view; exam page forces
+  silent autosave; surveys force `none`). Only the second belongs to the host.
+  It maps to the brief's modes plus one flag: `review` = `reviewMode`;
+  `normal` = the author's mode; **exam** is "normal, but never reveal
+  feedback", which is a host policy, not a launch mode. Proposal:
+  `init.mode` ∈ normal | browse | review, plus `init.policy.feedback: false`.
+- **The answer key is in the browser.** `QuestionInner` scores client-side
+  from the `correct` attributes, so wherever this component scores, the key is
+  readable in devtools (also in Eduskript today; on exam pages the feedback is
+  hidden, the key is still in the client props). The spec needs two grading
+  styles: **client-scored** (key in config, score self-reported; fine for
+  practice) and **host-scored** (no key sent; the widget submits the raw
+  response and the host returns feedback via the `feedback` message).
+- **saveState vs submit.** The question autosaves every change. In the spike,
+  each distinct answer marked `isSubmitted` is also `submit`ted: 4 submits for
+  a 2-check flow. Better: Check press = `attempt`, final check (or hand-in) =
+  `submit`. That needs `QuestionInner` to expose an `onCheck` callback.
+- Teacher progress bar, survey aggregation, exam answer history: need data
+  across students, so they stay host features; a host can build them from the
+  submit stream.
+
+### Bug found in Eduskript (not caused by the spike)
+
+`check` mode: a Check press **within 400 ms of the last answer change** is
+overwritten by the pending autosave. The debounced autosave timer
+(`quiz.tsx`, effect on `[selected, textAnswer, …]`) still holds a closure from
+before the check, so it saves `attempts`/`checked` from before the Check
+press. After a reload the question is unlocked again with the old attempt
+count: fast clickers get unlimited attempts, and a teacher sees
+`checked: false`. Reproduced in the spike (Check 0 ms after the click → stored
+`attempts: 0, checked: false`; 600 ms → `attempts: 1, checked: true`).
+Fix: keep the timer in a ref and clear it in `handleCheck`. Should go to the
+maintainer as a separate small fix.
+
 ## Implications for the interface (v0.1 sketch)
 
 - **State scopes.** Kara needs more than per-instance state: progress is
@@ -166,6 +251,15 @@ untrusted widgets.
   against the level. The spike submits `{code, level, stars}` + score
   (raw/min/max/scaled) when "Test all worlds" finishes.
 - **Voice** as an optional host capability, not a widget concern.
+- **Body is host-rendered HTML** for widgets that show author text (quiz);
+  plain text for widgets with their own format (Kara levels).
+- **Feedback policy** (`init.policy.feedback`) next to `mode`, for exams.
+- **Two grading styles:** client-scored (key in config) and host-scored (no
+  key; `feedback` message back). See the quiz section.
+- **attempt vs submit** need distinct meanings for autosaving widgets.
+- **Generic host.** `KaraHost` (PR 1) is Kara-specific. The quiz shows the
+  shape of the generic one: state with scopes, mode/policy, submit/attempt,
+  assets; Kara's voice lines become an optional capability on top.
 
 ## PR 1 candidate (no behaviour change)
 
@@ -186,3 +280,7 @@ Branch `feat/kara-host-interface`, one commit on `main`, not yet proposed:
 - Is a second build target (`standalone/`) acceptable long-term, and who owns it?
 - Should skript-wide progress/evidence be part of the public interface, or
   stay Eduskript-only?
+- Quiz: OK to split `QuestionInner` into its own module? And the check-mode
+  autosave race above.
+- Where should grading live for exams: is a host-scored path (no key in the
+  browser) wanted?
