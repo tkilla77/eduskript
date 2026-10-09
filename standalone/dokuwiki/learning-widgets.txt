@@ -1,0 +1,71 @@
+====== Learning widgets ======
+
+Two Eduskript widgets, **Kara** and a **quiz question**, embedded in DokuWiki with the ''learningwidget'' plugin. The widgets are static files served from [[https://bottom.ch/widgets/|bottom.ch/widgets]]; each one runs in a sandboxed iframe and is configured right here on the page. The wiki stores the answers in the browser and receives the submissions.
+
+===== Kara =====
+
+Both levels belong to the group ''week-1'', so their stars are stored once for the group. A solution for the first level:
+
+<code python>
+while not wall_front():
+    if on_barrel():
+        remove_barrel()
+    move()
+turn_left()
+move()
+</code>
+
+<learning-widget src="kara" id="kara-corridor" group="week-1" height="520">
+######E#
+#>..*..#
+########
+===
+######E#
+#>.*.*.#
+########
+---
+id: corridor
+goal: exit, collect
+energy: 20
+</learning-widget>
+
+<learning-widget src="kara" id="kara-boxes" group="week-1" height="520">
+#######
+#>.B.o#
+#######
+---
+id: push
+goal: boxes
+</learning-widget>
+
+===== Quiz =====
+
+<learning-widget src="quiz" id="q-immutable" type="multiple" feedback="check" attempts="2" points="2">
+<question-prompt><p>Which of these are <strong>immutable</strong> in Python?</p></question-prompt>
+<answer correct="true" feedback="Yes: a tuple cannot change after creation.">tuple</answer>
+<answer correct="false" feedback="Lists change in place.">list</answer>
+<answer correct="true" feedback="Yes: string methods return new strings.">str</answer>
+<answer correct="false" feedback="Dicts are mutable.">dict</answer>
+</learning-widget>
+
+<learning-widget src="quiz" id="q-output" type="text" expected="[1, 2, 3, 4]" points="1">
+<question-prompt><p>What does this print?</p><pre><code>a = [1, 2]
+b = a
+b += [3, 4]
+print(a)</code></pre></question-prompt>
+</learning-widget>
+
+===== How it is embedded =====
+
+The page source for the first quiz question:
+
+<code html>
+<learning-widget src="quiz" id="q-immutable" type="multiple" feedback="check" attempts="2" points="2">
+<question-prompt><p>Which of these are <strong>immutable</strong> in Python?</p></question-prompt>
+<answer correct="true" feedback="Yes: a tuple cannot change after creation.">tuple</answer>
+<answer correct="false" feedback="Lists change in place.">list</answer>
+…
+</learning-widget>
+</code>
+
+The same widgets on a plain HTML page: [[https://bottom.ch/widgets/demo/|bottom.ch/widgets/demo]].

@@ -1,0 +1,7 @@
+base    learningwidget
+author  Tom Hofmann
+email   tom@scheidweg.net
+date    2026-10-09
+name    Learning Widgets
+desc    Embed learning widgets (learning-widget/0.1 protocol) as sandboxed iframes with <learning-widget src="…">…</learning-widget>.
+url     https://bottom.ch/widgets/
