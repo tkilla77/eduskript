@@ -344,3 +344,27 @@ Branch `feat/kara-host-interface`, one commit on `main`, not yet proposed:
   autosave race above.
 - Where should grading live for exams: is a host-scored path (no key in the
   browser) wanted?
+
+## Upstream issues found while deploying the demo
+
+Not caused by the spike; each is a small separate fix.
+
+- **`scripts/seed-demo.mjs` fails on a fresh database.** It creates a
+  Collection with `slug` and without a Site (both changed: a Collection belongs
+  to a Site, no slug, no author table) and upserts `PageLayout` by `userId`
+  (it is keyed by `siteId`). The demo teacher and its site get created, the
+  content does not; the entrypoint tolerates the failure, so it goes unnoticed.
+- **A fresh install answers 404 everywhere on any host but eduskript.org.**
+  `src/proxy.ts` sends unknown hosts to the default org `eduskript`, which only
+  `scripts/seed-org.js` creates, and that is not in the start sequence. The
+  404 pages are then cached by Next.js until the container is recreated.
+- **`docker-compose.local.yml` publishes Postgres on all interfaces** with the
+  password `password`. Docker's port publishing bypasses host firewalls
+  (iptables DNAT + its own FORWARD chain). A dev database started that way on
+  the demo server was being brute-forced within a day and had a look-alike
+  superuser `postgres ` (trailing space) added. Default should be
+  `127.0.0.1:${POSTGRES_PORT:-5432}:5432`.
+- **The DB connection forces SSL for any non-localhost host**
+  (`src/lib/prisma.ts`, seeds: `ssl: isLocal ? false : {…}`). A Postgres on a
+  Docker network without TLS needs `?sslmode=disable` in `DATABASE_URL`
+  (node-postgres lets the connection string override the option).

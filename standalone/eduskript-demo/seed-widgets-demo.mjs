@@ -1,21 +1,34 @@
 /**
- * SPIKE — adds a "Learning widgets" collection to the demo teacher
- * (demo@eduskript.org, created by scripts/seed-demo.mjs): one skript with a
- * Kara page and a quiz page, the same widgets as the stand-alone demo
- * (standalone/demo, standalone/dokuwiki). Here they run natively in Eduskript
- * (in-page adapter), for comparison. Idempotent: does nothing if the skript
- * exists.
+ * SPIKE — demo content for the bottom.ch instance: a teacher account with its
+ * own site (OWNER_EMAIL, site slug OWNER_SITE) holding a "Learning widgets"
+ * collection: one skript with a Kara page and a quiz page, the same widgets as
+ * the stand-alone demo (standalone/demo, standalone/dokuwiki), here running
+ * natively in Eduskript (in-page adapter) for comparison.
+ *
+ * Also locks demo@eduskript.org (created by scripts/seed-demo.mjs with the
+ * public password "demodemo") by giving it a random password.
+ *
+ * Idempotent: an existing owner or skript is left alone. The owner's password
+ * is only set on creation and printed once, to stdout.
  *
  * Run inside the app container (needs the app's node_modules):
  *   docker cp seed-widgets-demo.mjs eduskript-demo:/app/scripts/
- *   docker exec -w /app eduskript-demo node scripts/seed-widgets-demo.mjs
+ *   docker exec -w /app -e OWNER_EMAIL=… eduskript-demo node scripts/seed-widgets-demo.mjs
+ *
+ * Schema notes (2026-10): a Collection belongs to a Site (no slug, no author
+ * table; editing rights come from owning the site); PageLayout hangs off the
+ * Site. scripts/seed-demo.mjs predates both and fails on a fresh database.
  */
 
+import crypto from 'crypto'
+import bcrypt from 'bcryptjs'
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import pg from 'pg'
 
-const DEMO_EMAIL = 'demo@eduskript.org'
+const OWNER_EMAIL = process.env.OWNER_EMAIL || 'tom@scheidweg.net'
+const OWNER_NAME = process.env.OWNER_NAME || 'Tom Hofmann'
+const OWNER_SITE = process.env.OWNER_SITE || 'tom'
 const SKRIPT_SLUG = 'learning-widgets'
 
 const KARA = `# Kara
@@ -85,29 +98,58 @@ What does \`a = [1, 2]; b = a; b += [3, 4]; print(a)\` print?
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL })
 const prisma = new PrismaClient({ adapter: new PrismaPg(pool) })
+const randomPassword = () => crypto.randomBytes(18).toString('base64url')
+
+async function ensureOwner() {
+  const existing = await prisma.user.findUnique({ where: { email: OWNER_EMAIL } })
+  if (existing) {
+    console.log(`Owner ${OWNER_EMAIL} already exists (password unchanged)`)
+    return existing
+  }
+  const password = randomPassword()
+  const user = await prisma.$transaction(async (tx) => {
+    const u = await tx.user.create({
+      data: {
+        email: OWNER_EMAIL,
+        name: OWNER_NAME,
+        accountType: 'teacher',
+        hashedPassword: await bcrypt.hash(password, 12),
+        emailVerified: new Date(),
+        billingPlan: 'pro',
+      },
+    })
+    await tx.site.create({ data: { slug: OWNER_SITE, userId: u.id, pageName: OWNER_NAME } })
+    return u
+  })
+  console.log(`OWNER_LOGIN ${OWNER_EMAIL} ${password}`)
+  return user
+}
+
+async function lockDemoTeacher() {
+  const demo = await prisma.user.findUnique({ where: { email: 'demo@eduskript.org' } })
+  if (!demo || !(await bcrypt.compare('demodemo', demo.hashedPassword ?? ''))) return
+  await prisma.user.update({ where: { id: demo.id }, data: { hashedPassword: await bcrypt.hash(randomPassword(), 12) } })
+  console.log('Locked demo@eduskript.org (public password replaced)')
+}
 
 async function main() {
-  const user = await prisma.user.findUnique({ where: { email: DEMO_EMAIL } })
-  if (!user) throw new Error(`${DEMO_EMAIL} not found: run scripts/seed-demo.mjs first`)
-  if (await prisma.skript.findFirst({ where: { slug: SKRIPT_SLUG } })) {
+  await lockDemoTeacher()
+  const owner = await ensureOwner()
+  const site = await prisma.site.findFirst({ where: { userId: owner.id } })
+  if (!site) throw new Error(`${OWNER_EMAIL} has no site`)
+  if (await prisma.skript.findFirst({ where: { slug: SKRIPT_SLUG, authors: { some: { userId: owner.id } } } })) {
     console.log('Learning widgets skript already exists')
     return
   }
 
-  const collection = await prisma.collection.create({
-    data: {
-      title: 'Learning widgets',
-      slug: 'learning-widgets',
-      description: 'Kara and quiz questions, natively in Eduskript',
-      authors: { create: { userId: user.id, permission: 'author' } },
-    },
-  })
+  const collection = await prisma.collection.create({ data: { siteId: site.id, title: 'Learning widgets' } })
   const skript = await prisma.skript.create({
     data: {
       title: 'Learning widgets',
       slug: SKRIPT_SLUG,
+      description: 'Kara and quiz questions, natively in Eduskript',
       isPublished: true,
-      authors: { create: { userId: user.id, permission: 'author' } },
+      authors: { create: { userId: owner.id, permission: 'author' } },
     },
   })
   await prisma.collectionSkript.create({ data: { collectionId: collection.id, skriptId: skript.id, order: 0 } })
@@ -123,20 +165,14 @@ async function main() {
         order,
         isPublished: true,
         skriptId: skript.id,
-        authors: { create: { userId: user.id, permission: 'author' } },
+        authors: { create: { userId: owner.id, permission: 'author' } },
       },
     })
   }
 
-  // Show the collection first on the demo teacher's front page. Layouts hang
-  // off the user's Site (PageLayout.siteId), not the user.
-  const site = await prisma.site.findFirst({ where: { userId: user.id } })
-  if (site) {
-    const layout = await prisma.pageLayout.upsert({ where: { siteId: site.id }, create: { siteId: site.id }, update: {} })
-    await prisma.pageLayoutItem.updateMany({ where: { pageLayoutId: layout.id }, data: { order: { increment: 1 } } })
-    await prisma.pageLayoutItem.create({ data: { pageLayoutId: layout.id, type: 'collection', contentId: collection.id, order: 0 } })
-  }
-  console.log(`Created collection "${collection.title}" with ${pages.length} pages`)
+  const layout = await prisma.pageLayout.upsert({ where: { siteId: site.id }, create: { siteId: site.id }, update: {} })
+  await prisma.pageLayoutItem.create({ data: { pageLayoutId: layout.id, type: 'collection', contentId: collection.id, order: 0 } })
+  console.log(`Created "${collection.title}" on site /${site.slug} with ${pages.length} pages`)
 }
 
 main()
