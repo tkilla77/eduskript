@@ -1,25 +1,33 @@
 /**
- * SPIKE — widget host interface, v0.1 draft.
+ * SPIKE — widget host interface, v0.1 draft, and its widget-side adapters.
  *
- * Widget code talks to `WidgetHost`, never to a transport. Only the no-host
- * adapter (browser storage) exists so far; the in-page (Eduskript) and
- * postMessage adapters are not written yet.
+ * Widget code talks to `WidgetHost`, never to a transport. Adapters:
+ *   - createNoHost:          browser storage only (page opened directly, or a
+ *                            #config= fragment without a host script)
+ *   - createPostMessageHost: inside an iframe created by embed.js (or any host
+ *                            speaking the protocol in protocol.ts)
+ * Eduskript's own in-page adapter for Kara lives in src/lib/kara/host-inpage.ts.
  *
- * State is keyed by (scope, key) because that is what Kara already needs:
- * progress is skript-wide (scope = skriptId), not per instance. Whether the
- * spec should expose scopes or only per-instance state is an open question.
+ * State scopes: widgets say *what* the state belongs to, the host decides
+ * *where* it goes. `instance` = this embed (quiz answer, Kara code); `group` =
+ * shared by the embeds of a group the host defines (Kara stars and evidence;
+ * Eduskript: the skript, embed.js: the `group` attribute or the page).
  */
 
+import { PROTOCOL, type HostMessage, type WidgetMessage } from './protocol'
+
 export type WidgetMode = 'normal' | 'browse' | 'review'
+export type StateScope = 'instance' | 'group'
+export type Theme = 'light' | 'dark'
 
 export interface WidgetInit {
-  protocol: '0.1'
+  protocol: typeof PROTOCOL
   instanceId: string
   mode: WidgetMode
-  /** Embed attributes plus the embed body (for Kara: the kara-world block). */
+  /** Embed attributes plus the embed body (Kara: level text; quiz: host-rendered HTML). */
   config: { attributes: Record<string, string>; body: string }
-  theme: 'light' | 'dark'
-  /** What the host offers, e.g. 'state', 'submit', 'feedback', 'voice'. */
+  theme: Theme
+  /** What the host offers, e.g. 'state', 'submit'. */
   capabilities: string[]
 }
 
@@ -32,12 +40,21 @@ export interface WidgetSubmission {
 
 export interface WidgetHost {
   init: WidgetInit
-  getState<T>(scope: string, key: string): Promise<T | null>
-  saveState<T>(scope: string, key: string, data: T): Promise<void>
-  /** Fires on external updates (another tab, host sync). */
-  onStateChanged<T>(scope: string, key: string, cb: (data: T) => void): () => void
+  getState<T>(scope: StateScope, key: string): Promise<T | null>
+  saveState<T>(scope: StateScope, key: string, data: T): Promise<void>
+  /** Fires on every save of the record, including this widget's own (and other embeds' for `group`). */
+  onStateChanged<T>(scope: StateScope, key: string, cb: (data: T) => void): () => void
   submit(s: WidgetSubmission): void
-  onThemeChanged(cb: (theme: 'light' | 'dark') => void): () => void
+  onThemeChanged(cb: (theme: Theme) => void): () => void
+}
+
+type Listeners = Map<string, Set<(d: unknown) => void>>
+
+function listen(listeners: Listeners, k: string, cb: (d: unknown) => void): () => void {
+  const set = listeners.get(k) ?? new Set()
+  set.add(cb)
+  listeners.set(k, set)
+  return () => { set.delete(cb) }
 }
 
 // ─── no-host adapter: browser storage only ───────────────────────────────
@@ -52,11 +69,11 @@ function storage(): Storage | null {
 export function createNoHost(init: Omit<WidgetInit, 'protocol' | 'capabilities'>): WidgetHost {
   const mem = new Map<string, string>()
   const ls = storage()
-  const listeners = new Map<string, Set<(d: unknown) => void>>()
-  const k = (scope: string, key: string) => `${PREFIX}${scope}:${key}`
-  const themeListeners = new Set<(t: 'light' | 'dark') => void>()
-  const mq = window.matchMedia('(prefers-color-scheme: dark)')
-  mq.addEventListener('change', e => themeListeners.forEach(cb => cb(e.matches ? 'dark' : 'light')))
+  const listeners: Listeners = new Map()
+  const k = (scope: StateScope, key: string) => `${PREFIX}${scope === 'group' ? 'group' : init.instanceId}:${key}`
+  const themeListeners = new Set<(t: Theme) => void>()
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e =>
+    themeListeners.forEach(cb => cb(e.matches ? 'dark' : 'light')))
 
   // Cross-tab updates (same origin only).
   window.addEventListener('storage', e => {
@@ -65,22 +82,19 @@ export function createNoHost(init: Omit<WidgetInit, 'protocol' | 'capabilities'>
   })
 
   return {
-    init: { ...init, protocol: '0.1', capabilities: ['state'] },
-    async getState<T>(scope: string, key: string) {
+    init: { ...init, protocol: PROTOCOL, capabilities: ['state'] },
+    async getState<T>(scope: StateScope, key: string) {
       const raw = ls ? ls.getItem(k(scope, key)) : mem.get(k(scope, key)) ?? null
       return raw ? (JSON.parse(raw) as T) : null
     },
-    async saveState<T>(scope: string, key: string, data: T) {
+    async saveState<T>(scope: StateScope, key: string, data: T) {
       const raw = JSON.stringify(data)
       if (ls) ls.setItem(k(scope, key), raw)
       else mem.set(k(scope, key), raw)
       listeners.get(k(scope, key))?.forEach(cb => cb(data))
     },
-    onStateChanged<T>(scope: string, key: string, cb: (data: T) => void) {
-      const set = listeners.get(k(scope, key)) ?? new Set()
-      set.add(cb as (d: unknown) => void)
-      listeners.set(k(scope, key), set)
-      return () => { set.delete(cb as (d: unknown) => void) }
+    onStateChanged<T>(scope: StateScope, key: string, cb: (data: T) => void) {
+      return listen(listeners, k(scope, key), cb as (d: unknown) => void)
     },
     submit(s) {
       // No host to receive it. Logged so the spike shows what would be sent.
@@ -90,6 +104,91 @@ export function createNoHost(init: Omit<WidgetInit, 'protocol' | 'capabilities'>
       themeListeners.add(cb)
       return () => { themeListeners.delete(cb) }
     },
+  }
+}
+
+// ─── postMessage adapter: inside a host-created iframe ───────────────────
+
+/**
+ * Sends `ready` to the parent and resolves with a host once `init` arrives;
+ * null after `timeoutMs` (no host script on the parent page).
+ *
+ * Messages are accepted only from `window.parent` (a sandboxed frame has
+ * origin "null", so the sender window is the check, not the origin) and
+ * posted with targetOrigin '*': the widget cannot know the host's origin, and
+ * everything it sends is its own state, which the embedding page owns anyway.
+ */
+export function connectPostMessageHost(timeoutMs = 3000): Promise<WidgetHost | null> {
+  if (window.parent === window) return Promise.resolve(null)
+  const post = (m: WidgetMessage) => window.parent.postMessage(m, '*')
+  const pending = new Map<number, (data: unknown) => void>()
+  const listeners: Listeners = new Map()
+  const themeListeners = new Set<(t: Theme) => void>()
+  const k = (scope: StateScope, key: string) => `${scope}:${key}`
+  let nextId = 1
+
+  return new Promise(resolve => {
+    const timer = setTimeout(() => resolve(null), timeoutMs)
+    window.addEventListener('message', e => {
+      if (e.source !== window.parent) return
+      const m = e.data as HostMessage
+      if (!m || m.protocol !== PROTOCOL) return
+      switch (m.type) {
+        case 'init':
+          clearTimeout(timer)
+          resolve(makeHost(m.init))
+          break
+        case 'state':
+          pending.get(m.id)?.(m.data)
+          pending.delete(m.id)
+          break
+        case 'stateChanged':
+          listeners.get(k(m.scope, m.key))?.forEach(cb => cb(m.data))
+          break
+        case 'themeChanged':
+          themeListeners.forEach(cb => cb(m.theme))
+          break
+      }
+    })
+    post({ protocol: PROTOCOL, type: 'ready' })
+  })
+
+  function makeHost(init: WidgetInit): WidgetHost {
+    // Report the content height so the host can size the iframe. Measures the
+    // React root, not body/scrollHeight: the app stylesheet (globals.css) makes
+    // body fill the viewport, so those only ever report the iframe's own height.
+    const content = document.getElementById('root') ?? document.body
+    let last = 0
+    new ResizeObserver(() => {
+      const h = Math.ceil(content.getBoundingClientRect().height)
+      if (h !== last) post({ protocol: PROTOCOL, type: 'resize', height: (last = h) })
+    }).observe(content)
+
+    return {
+      init,
+      getState<T>(scope: StateScope, key: string) {
+        const id = nextId++
+        return new Promise<T | null>(res => {
+          pending.set(id, d => res((d ?? null) as T | null))
+          post({ protocol: PROTOCOL, type: 'getState', id, scope, key })
+        })
+      },
+      async saveState<T>(scope: StateScope, key: string, data: T) {
+        post({ protocol: PROTOCOL, type: 'saveState', scope, key, data })
+      },
+      onStateChanged<T>(scope: StateScope, key: string, cb: (data: T) => void) {
+        // The host echoes saves back as stateChanged, to this frame and to the
+        // other frames sharing the record.
+        return listen(listeners, k(scope, key), cb as (d: unknown) => void)
+      },
+      submit(s) {
+        post({ protocol: PROTOCOL, type: 'submit', ...s })
+      },
+      onThemeChanged(cb) {
+        themeListeners.add(cb)
+        return () => { themeListeners.delete(cb) }
+      },
+    }
   }
 }
 

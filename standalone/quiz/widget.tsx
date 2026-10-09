@@ -63,11 +63,11 @@ export function QuizWidget() {
   const lastSubmitted = useRef<string | null>(null)
 
   useEffect(() => {
-    void host().getState<QuizData>(instanceId, STATE_KEY).then(setData)
+    void host().getState<QuizData>('instance', STATE_KEY).then(setData)
   }, [instanceId])
 
   const updateData = async (next: QuizData) => {
-    await host().saveState(instanceId, STATE_KEY, next)
+    await host().saveState('instance', STATE_KEY, next)
     // QuestionInner autosaves on every change; only answers it counts as
     // submitted are reported, and each distinct answer only once.
     const sig = JSON.stringify(next)

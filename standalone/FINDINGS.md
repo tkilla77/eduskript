@@ -20,15 +20,18 @@ stub so that `userDataService` is not bundled.
 ```bash
 pnpm exec vite build   --config standalone/vite.config.ts
 pnpm exec vite preview --config standalone/vite.config.ts --port 4317
-# http://localhost:4317/kara/index.html
-# http://localhost:4317/quiz/index.html
-# ?id=<instance> separates saved state; ?mode=review for the read-only view
+# http://localhost:4317/demo/index.html   host page: both widgets via embed.js
+# http://localhost:4317/kara/index.html    a widget opened directly (built-in demo config)
+# http://localhost:4317/quiz/index.html    ?id=<instance>, ?mode=review
 ```
 
 | File | Role |
 |---|---|
-| `shared/host.ts` | `WidgetHost` interface v0.1 draft + no-host adapter (localStorage, memory fallback) |
-| `shared/boot.ts` | Builds `init` from the page (attributes JSON, body, `?id`, `?mode`) — stand-in for a real host |
+| `shared/host.ts` | `WidgetHost` interface v0.1 draft; no-host adapter (localStorage, memory fallback) and postMessage adapter |
+| `shared/protocol.ts` | The `learning-widget/0.1` messages between widget and host |
+| `shared/boot.ts` | Picks the transport: `#config=` fragment → no host; inside a frame → postMessage; else the widget page's own demo config |
+| `embed/embed.js` | Reference host: `<learning-widget>` element → sandboxed iframe, init, state in the host page's localStorage, resize, `widget-submit` event. Plain JS, copied unchanged into `dist/` |
+| `demo/index.html` | Plain HTML host page: two Kara levels in one group, two quiz questions, submit log |
 | `shims/host-inpage.ts` | Replaces Eduskript's in-page `KaraHost` adapter with a stub (keeps the app out of the bundle) |
 | `kara/widget.tsx` | CodeMirror + Run/Stop + `KaraPanel`, ~150 lines, re-assembled from `code-editor/index.tsx` |
 | `kara/main.tsx` | Installs the hosts (`setKaraHost` on top of the widget host). `?tiles=<url>` sets a tileset URL |
@@ -234,8 +237,65 @@ press. After a reload the question is unlocked again with the old attempt
 count: fast clickers get unlimited attempts, and a teacher sees
 `checked: false`. Reproduced in the spike (Check 0 ms after the click → stored
 `attempts: 0, checked: false`; 600 ms → `attempts: 1, checked: true`).
-Fix: keep the timer in a ref and clear it in `handleCheck`. Should go to the
-maintainer as a separate small fix.
+Fixed on `fix/quiz-check-autosave-race` (off `main`, with a regression test):
+`handleCheck` cancels the pending autosave. Merged into `spike/widget-host`.
+
+## Embedding: configure at the inclusion site
+
+The widget pages are generic; the embedding page configures each use:
+
+```html
+<script type="module" src="embed.js"></script>
+<learning-widget src="https://widgets.example/kara/" id="level-1" group="week-1">
+  <script type="text/plain">…level…</script>
+</learning-widget>
+<learning-widget src="https://widgets.example/quiz/" type="single" attempts="2">
+  <template><question-prompt>…</question-prompt><answer correct="true">…</answer></template>
+</learning-widget>
+```
+
+`embed.js` (≈240 lines, plain JS) replaces each element with
+`<iframe sandbox="allow-scripts">`, answers the widget's `ready` with `init`
+(attributes, body, instance id, mode, theme), stores state in the **host
+page's** localStorage (this fixes "no persistence inside the sandbox"), sizes
+the iframe from `resize`, and raises `widget-submit` on the element. Without a
+host script, `<iframe src=".../quiz/#config=<base64url JSON>">` works too, with
+no persistence.
+
+State keys: `lw:<widget URL>|instance:<page path>#<id>|<key>` and
+`lw:<widget URL>|group:<group>|<key>`. Widgets only say `instance` or `group`;
+the host decides what a group is (Eduskript: the skript; embed.js: the `group`
+attribute, default the page path).
+
+Tested cross-origin in Chromium (host page on one port, widgets on another):
+all four embeds configured from the host page; iframes sized to content; Kara
+level solved (3★ stored once for the group); quiz checked; three
+`widget-submit` events with responses and scores; quiz locked and Kara code
+restored after reload; `#config=` fallback renders; a forged message from a
+window that is not a widget frame is ignored.
+
+Found on the way: the widget must measure its React root, not `body` — the
+app stylesheet makes `body` fill the viewport, so body-based heights only
+ever reported the iframe's own height.
+
+### Trust model
+
+The iframes isolate the host from the widgets, but `embed.js` itself runs
+with the host page's rights. So it is **host code**: vendored or pinned with
+an integrity hash, small enough to read in full, no imports, no shared code
+with the widgets. It never evaluates or inserts anything a widget sends; its
+only effects are namespaced, size-capped storage writes, a clamped iframe
+height and the submit event; it only handles messages whose sender is one of
+its own frames (origin is "null" for all of them). The protocol is the
+contract; `embed.js` is a reference implementation (DokuWiki and Eduskript
+can have their own).
+
+What the sandbox cannot stop: anything handed to a widget (config, its saved
+state) can be sent anywhere by the widget, since a sandboxed frame may still
+make network requests. Treat it as disclosed to the widget provider and pass
+nothing personal (pseudonymous instance ids only). The iframe `csp` attribute
+could restrict a widget's network access but is Chromium-only. Widget
+versions should be pinned by URL so students get what the teacher tested.
 
 ## Implications for the interface (v0.1 sketch)
 

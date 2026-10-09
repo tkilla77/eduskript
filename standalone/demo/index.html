@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Learning widgets demo</title>
+  <!-- A pinned copy of the reference host script. A real host vendors it. -->
+  <script type="module" src="../embed.js"></script>
+  <style>
+    :root { color-scheme: light dark; --fg: #1f2328; --bg: #ffffff; --muted: #656d76; --line: #d0d7de; --panel: #f6f8fa; }
+    @media (prefers-color-scheme: dark) { :root { --fg: #e6edf3; --bg: #0d1117; --muted: #8d96a0; --line: #30363d; --panel: #161b22; } }
+    body { font: 16px/1.6 system-ui, sans-serif; color: var(--fg); background: var(--bg); max-width: 860px; margin: 0 auto; padding: 24px 16px 64px; }
+    h1 { margin-bottom: 0; }
+    .lead { color: var(--muted); margin-top: 4px; }
+    code { font-size: 0.9em; }
+    learning-widget { display: block; margin: 16px 0 32px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+    learning-widget:not(:defined) { display: none; }
+    #log { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; font: 13px/1.5 ui-monospace, monospace; white-space: pre-wrap; min-height: 3em; }
+  </style>
+</head>
+<body>
+  <h1>Learning widgets demo</h1>
+  <p class="lead">A plain HTML page standing in for any host (a wiki, an LMS page). It includes one
+    script, <code>embed.js</code>, and configures each widget where it is used. The widgets run in
+    sandboxed iframes; this page stores their state and receives their submissions.</p>
+
+  <h2>Kara: two levels, one group</h2>
+  <p>Both levels share the group <code>week-1</code>, so stars and evidence are stored once for the group.
+    Try: <code>while not wall_front():</code> / <code>    if on_barrel(): remove_barrel()</code> /
+    <code>    move()</code>, then <code>turn_left()</code> and <code>move()</code>.</p>
+
+  <learning-widget src="../kara/" id="kara-corridor" group="week-1" height="520">
+    <script type="text/plain">
+######E#
+#>..*..#
+########
+===
+######E#
+#>.*.*.#
+########
+---
+id: corridor
+goal: exit, collect
+energy: 20
+    </script>
+  </learning-widget>
+
+  <learning-widget src="../kara/" id="kara-boxes" group="week-1" height="520">
+    <script type="text/plain">
+#######
+#>.B.o#
+#######
+---
+id: push
+goal: boxes
+intro: Push the box onto the target. | speaker=AURORA
+    </script>
+  </learning-widget>
+
+  <h2>Quiz</h2>
+  <learning-widget src="../quiz/" id="q-immutable" type="multiple" feedback="check" attempts="2" points="2">
+    <template>
+      <question-prompt><p>Which of these are <strong>immutable</strong> in Python?</p></question-prompt>
+      <answer correct="true" feedback="Yes: a tuple cannot change after creation.">tuple</answer>
+      <answer correct="false" feedback="Lists change in place.">list</answer>
+      <answer correct="true" feedback="Yes: string methods return new strings.">str</answer>
+      <answer correct="false" feedback="Dicts are mutable.">dict</answer>
+    </template>
+  </learning-widget>
+
+  <learning-widget src="../quiz/" id="q-output" type="text" expected="[1, 2, 3, 4]" points="1">
+    <template>
+      <question-prompt><p>What does this print?</p><pre><code>a = [1, 2]
+b = a
+b += [3, 4]
+print(a)</code></pre></question-prompt>
+    </template>
+  </learning-widget>
+
+  <h2>What the host received</h2>
+  <p>Every <code>widget-submit</code> event from the widgets above (scores are self-reported):</p>
+  <div id="log">Nothing submitted yet.</div>
+
+  <script type="module">
+    const log = document.getElementById('log')
+    let first = true
+    document.addEventListener('widget-submit', (e) => {
+      const { instanceId, response, score } = e.detail
+      const line = `${new Date().toLocaleTimeString()}  ${instanceId}  score=${score ? `${score.raw}/${score.max}` : '–'}  response=${JSON.stringify(response)}`
+      log.textContent = (first ? '' : log.textContent + '\n') + line
+      first = false
+    })
+  </script>
+</body>
+</html>

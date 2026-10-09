@@ -3,25 +3,39 @@
  *
  *   pnpm exec vite build   --config standalone/vite.config.ts
  *   pnpm exec vite preview --config standalone/vite.config.ts --port 4317
- *   → /kara/index.html, /quiz/index.html
+ *   → /kara/index.html, /quiz/index.html   widgets (configurable via embed.js)
+ *     /embed.js                           reference host script, copied as is
+ *     /demo/index.html                    plain HTML page using embed.js
  *
  * Reuses the app sources via the `@` alias. `@/lib/kara/host-inpage` (the
  * Eduskript adapter) is swapped for a stub; kara/main.tsx installs the real
  * host with setKaraHost (src/lib/kara/host.ts).
  */
 
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
+import { cpSync } from 'node:fs'
 import react from '@vitejs/plugin-react'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const src = path.resolve(here, '../src')
+const outDir = path.resolve(here, 'dist')
+
+// embed.js and the demo page are plain files, not part of the widget bundles:
+// copied unchanged so the host script stays readable and vendorable.
+const copyPlain: Plugin = {
+  name: 'copy-plain-files',
+  closeBundle() {
+    cpSync(path.resolve(here, 'embed/embed.js'), path.resolve(outDir, 'embed.js'))
+    cpSync(path.resolve(here, 'demo'), path.resolve(outDir, 'demo'), { recursive: true })
+  },
+}
 
 export default defineConfig({
   root: here,
   base: './',
-  plugins: [react()],
+  plugins: [react(), copyPlain],
   // Only public/kara is needed, but publicDir takes one directory, so all of
   // public/ (3.6 MB) is copied. A real build target should copy public/kara only.
   publicDir: path.resolve(here, '../public'),
@@ -36,7 +50,7 @@ export default defineConfig({
   // scripts and crossorigin CSS then need CORS from whatever serves the files.
   preview: { headers: { 'Access-Control-Allow-Origin': '*' } },
   build: {
-    outDir: path.resolve(here, 'dist'),
+    outDir,
     emptyOutDir: true,
     rolldownOptions: {
       input: {

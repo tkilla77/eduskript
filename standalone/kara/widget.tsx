@@ -43,7 +43,7 @@ export function KaraWidget() {
   useEffect(() => {
     warmPyodideWorker()
     let destroyed = false
-    void host().getState<string>(instanceId, CODE_KEY).then(saved => {
+    void host().getState<string>('instance', CODE_KEY).then(saved => {
       if (destroyed || !editorEl.current) return
       let t: ReturnType<typeof setTimeout> | undefined
       view.current = new EditorView({
@@ -55,7 +55,7 @@ export function KaraWidget() {
             EditorView.updateListener.of(u => {
               if (!u.docChanged) return
               clearTimeout(t)
-              t = setTimeout(() => void host().saveState(instanceId, CODE_KEY, u.state.doc.toString()), 500)
+              t = setTimeout(() => void host().saveState('instance', CODE_KEY, u.state.doc.toString()), 500)
             }),
           ],
         }),
@@ -141,8 +141,9 @@ export function KaraWidget() {
         onTestAll={() => void start(true)}
         config={level.config}
         levelId={levelId}
-        // KaraPanel only saves progress when this is set; the host scopes it.
-        skriptId="standalone"
+        // KaraPanel only saves progress when this is set. Kara's progress is
+        // course-wide, so main.tsx maps it to the host's `group` scope.
+        skriptId="group"
         maxTile={40}
         onLine={(t: KaraLineTarget | null) => { if (view.current) showKaraLine(view.current, t) }}
       />
