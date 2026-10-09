@@ -13,7 +13,7 @@
  */
 
 import { defineConfig, type Plugin } from 'vite'
-import { cpSync } from 'node:fs'
+import { cpSync, existsSync } from 'node:fs'
 import react from '@vitejs/plugin-react'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
@@ -30,6 +30,10 @@ const copyPlain: Plugin = {
   name: 'copy-plain-files',
   closeBundle() {
     cpSync(path.resolve(here, '../public/kara'), path.resolve(outDir, 'kara'), { recursive: true })
+    // Licensed tileset, only if imported locally (tools/import-kara-tileset.sh;
+    // public/kara-tiles is gitignored). Without it Kara draws placeholders.
+    const tiles = path.resolve(here, '../public/kara-tiles')
+    if (existsSync(tiles)) cpSync(tiles, path.resolve(outDir, 'kara-tiles'), { recursive: true })
     cpSync(path.resolve(here, 'embed/embed.js'), path.resolve(outDir, 'embed.js'))
     cpSync(path.resolve(here, 'widgets.htaccess'), path.resolve(outDir, '.htaccess'))
     cpSync(path.resolve(here, 'demo'), path.resolve(outDir, 'demo'), { recursive: true })

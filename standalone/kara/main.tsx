@@ -20,7 +20,11 @@ void bootHost('demo').then(host => {
     saveState: (_scope, key, data) => host.saveState('group', key, data),
     onStateChanged: (_scope, key, cb) => host.onStateChanged('group', key, cb),
     assetUrl: path => new URL(`.${path}`, root).href,
-    tilesetUrl: () => host.init.config.attributes.tiles ?? new URLSearchParams(location.search).get('tiles') ?? '',
+    // Tileset: the embed's `tiles` attribute, else ?tiles=, else the copy
+    // deployed next to the widgets (dist/kara-tiles; 404 → placeholders).
+    tilesetUrl: () => host.init.config.attributes.tiles
+      ?? new URLSearchParams(location.search).get('tiles')
+      ?? new URL('kara-tiles', root).href,
   })
   createRoot(document.getElementById('root')!).render(<KaraWidget />)
 })
